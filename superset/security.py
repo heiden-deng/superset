@@ -10,6 +10,8 @@ from sqlalchemy import or_
 from superset import sql_parse
 from superset.connectors.connector_registry import ConnectorRegistry
 
+
+
 READ_ONLY_MODEL_VIEWS = {
     'DatabaseAsync',
     'DatabaseView',
@@ -316,14 +318,84 @@ class SupersetSecurityManager(SecurityManager):
         self.set_role('granter', self.is_granter_pvm)
         self.set_role('sql_lab', self.is_sql_lab_pvm)
 
+        # create custom rcm  role
+        from superset import app
+        self.set_role(app.config['CUSTOM_ROLE_NAME_KEYWORD'], self.is_gamma_pvm)
+
+
         if conf.get('PUBLIC_ROLE_LIKE_GAMMA', False):
             self.set_role('Public', self.is_gamma_pvm)
 
         self.create_missing_perms()
 
+        # sync custom rcm role permission
+        self.auth_custom_role_perm()
+
         # commit role and view menu updates
         self.get_session.commit()
         self.clean_perms()
+
+    def auth_custom_role_perm(self):
+        from superset import app
+        from superset import utils
+        role = self.find_role(app.config['CUSTOM_ROLE_NAME_KEYWORD'])
+
+        permission_name = 'database_access'
+        main_db = utils.get_or_create_main_db()
+        view_menu_name = main_db.get_perm()
+        permission = self.find_permission(permission_name)
+        view_menu = self.find_view_menu(view_menu_name)
+        pv = None
+        if permission and view_menu:
+            pv = self.get_session.query(self.permissionview_model).filter_by(
+                permission=permission, view_menu=view_menu).first()
+
+        if not pv and permission and view_menu:
+            self.add_permission_view_menu(permission_name, view_menu_name)
+            logging.info("add %s on %s to permission_view" % (permission_name, view_menu_name))
+
+        pv = self.get_session.query(self.permissionview_model).filter_by(
+            permission=permission, view_menu=view_menu).first()
+        if pv:
+            self.add_permission_role(role,pv)
+            logging.info("add database access on %s to role %s" % (view_menu_name, role.name))
+
+        permission_name = 'can_csv'
+        view_menu_name = 'Superset'
+        permission = self.find_permission(permission_name)
+        view_menu = self.find_view_menu(view_menu_name)
+        pv = None
+        if permission and view_menu:
+            pv = self.get_session.query(self.permissionview_model).filter_by(
+                permission=permission, view_menu=view_menu).first()
+        if pv:
+            self.add_permission_role(role, pv)
+            logging.info("add %s on %s to role %s" % (permission_name, view_menu_name, role.name))
+
+        permission_name = 'can_schemas_access_for_csv_upload'
+        view_menu_name = 'Superset'
+        permission = self.find_permission(permission_name)
+        view_menu = self.find_view_menu(view_menu_name)
+        pv = None
+        if permission and view_menu:
+            pv = self.get_session.query(self.permissionview_model).filter_by(
+                permission=permission, view_menu=view_menu).first()
+        if pv:
+            self.add_permission_role(role, pv)
+            logging.info("add %s on %s to role %s" % (permission_name, view_menu_name, role.name))
+
+        permission_name = 'menu_access'
+        view_menu_name = 'Upload a CSV'
+        permission = self.find_permission(permission_name)
+        view_menu = self.find_view_menu(view_menu_name)
+        pv = None
+        if permission and view_menu:
+            pv = self.get_session.query(self.permissionview_model).filter_by(
+                permission=permission, view_menu=view_menu).first()
+        if pv:
+            self.add_permission_role(role, pv)
+            logging.info("add %s on %s to role %s" % (permission_name, view_menu_name, role.name))
+
 
     def set_role(self, role_name, pvm_check):
         logging.info('Syncing {} perms'.format(role_name))
@@ -398,6 +470,7 @@ class SupersetSecurityManager(SecurityManager):
         view_menu = self.find_view_menu(view_menu_name)
         pv = None
 
+
         if not permission:
             permission_table = self.permission_model.__table__  # noqa: E501 pylint: disable=no-member
             connection.execute(
@@ -425,3 +498,81 @@ class SupersetSecurityManager(SecurityManager):
                     view_menu_id=view_menu.id,
                 ),
             )
+            from superset import app
+            if app.config['ENABLE_CUSTOM_ROLE_RESOURCE_SHOW']:
+                pv = self.get_session.query(self.permissionview_model).filter_by(
+                    permission=permission, view_menu=view_menu).first()
+                user_role = None   #self.find_role("addcsv")
+                roles = None
+                if hasattr(g, 'user') and hasattr(g.user, 'roles'):
+                    roles = g.user.roles
+                internal_roles = ["Admin", "Alpha", "Gamma", "granter", "sql_lab", "Public"]
+                if roles:
+                    for role in roles:
+                        if role.name not in internal_roles and \
+                                role.name.lower().find(app.config['CUSTOM_ROLE_NAME_KEYWORD'].lower()) >= 0:
+                            user_role = role
+                            break
+                from superset.models.core import Database
+                if pv and not isinstance(target, Database) and user_role and pv not in user_role.permissions:
+                    connection.execute(
+                        ab_models.assoc_permissionview_role.insert()
+                        .values(
+                            role_id=role.id,
+                            permission_view_id=pv.id,
+                        ),
+                    )
+                    logging.info("add new permission-view to role")
+        self.set_perm_ex(connection, target)
+
+    def set_perm_ex(self, connection, target):
+        from superset import app
+        from superset.models.core import Database
+        if app.config['ENABLE_CUSTOM_ROLE_RESOURCE_SHOW'] and isinstance(target, Database) and Database.allow_csv_upload:
+            permission_name = 'database_access'
+            view_menu_name = target.get_perm()
+            permission = self.find_permission(permission_name)
+            view_menu = self.find_view_menu(view_menu_name)
+            pv = None
+
+            if not permission:
+                permission_table = self.permission_model.__table__  # noqa: E501 pylint: disable=no-member
+                connection.execute(
+                    permission_table.insert()
+                    .values(name=permission_name),
+                )
+                permission = self.find_permission(permission_name)
+            if not view_menu:
+                view_menu_table = self.viewmenu_model.__table__  # pylint: disable=no-member
+                connection.execute(
+                    view_menu_table.insert()
+                    .values(name=view_menu_name),
+                )
+                view_menu = self.find_view_menu(view_menu_name)
+
+            if permission and view_menu:
+                pv = self.get_session.query(self.permissionview_model).filter_by(
+                    permission=permission, view_menu=view_menu).first()
+            if not pv and permission and view_menu:
+                permission_view_table = self.permissionview_model.__table__  # noqa: E501 pylint: disable=no-member
+                connection.execute(
+                    permission_view_table.insert()
+                    .values(
+                        permission_id=permission.id,
+                        view_menu_id=view_menu.id,
+                    ),
+                )
+
+            pv = self.get_session.query(self.permissionview_model).filter_by(
+                permission=permission, view_menu=view_menu).first()
+            user_role = self.find_role(app.config['CUSTOM_ROLE_NAME_KEYWORD'])  # self.find_role("addcsv")
+
+            if pv and user_role and pv not in user_role.permissions:
+                connection.execute(
+                    ab_models.assoc_permissionview_role.insert()
+                    .values(
+                        role_id=user_role.id,
+                        permission_view_id=pv.id,
+                    ),
+                )
+                logging.info("add new permission-view to role %s" % app.config['CUSTOM_ROLE_NAME_KEYWORD'])

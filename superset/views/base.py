@@ -251,6 +251,9 @@ class SupersetFilter(BaseFilter):
                 vm.add(vm_name)
         return vm
 
+    def get_current_user_slice_ids(self):
+        return get_current_user_slice_ids()
+
 
 class DatasourceFilter(SupersetFilter):
     def apply(self, query, func):  # noqa
@@ -258,7 +261,11 @@ class DatasourceFilter(SupersetFilter):
             return query
         perms = self.get_view_menus('datasource_access')
         # TODO(bogdan): add `schema_access` support here
-        return query.filter(self.model.perm.in_(perms))
+        from superset import app
+        if app.config['ENABLE_CUSTOM_ROLE_RESOURCE_SHOW'] and not app.config['ENABLE_DATASOURCE_SHARE_IN_CUSTOM_ROLE']:
+            return query.filter(self.model.perm.in_(perms)).filter(self.model.user_id == g.user.id)
+        else:
+            return query.filter(self.model.perm.in_(perms))
 
 
 class CsvResponse(Response):
@@ -295,10 +302,15 @@ def check_ownership(obj, raise_if_false=True):
 
     # Making a list of owners that works across ORM models
     owners = []
-    if hasattr(orig_obj, 'owners'):
-        owners += orig_obj.owners
-    if hasattr(orig_obj, 'owner'):
-        owners += [orig_obj.owner]
+
+    from superset import app
+    from .core import DashboardModelView
+    if (not app.config['ENABLE_CUSTOM_ROLE_RESOURCE_SHOW'] or app.config['ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE']) or \
+            (not app.config['ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE'] and not isinstance(orig_obj, DashboardModelView)):
+        if hasattr(orig_obj, 'owners'):
+            owners += orig_obj.owners
+        if hasattr(orig_obj, 'owner'):
+            owners += [orig_obj.owner]
     if hasattr(orig_obj, 'created_by'):
         owners += [orig_obj.created_by]
 
@@ -312,3 +324,17 @@ def check_ownership(obj, raise_if_false=True):
         raise security_exception
     else:
         return False
+
+def get_current_user_slice_ids():
+    from superset.models.core import slice_user
+
+    user_id = g.user.id
+    session = db.create_scoped_session()
+
+    # slicee = connection.execute(slice_user.select().where(slice_user.c.user_id == user_id))
+    slices = session.query(slice_user).filter_by(user_id=user_id).all()
+    slice_id_set = set()
+    for slice in slices:
+        slice_id_set.add(slice.slice_id)
+
+    return slice_id_set

@@ -88,13 +88,28 @@ def is_owner(obj, user):
     return obj and user in obj.owners
 
 
+def check_dbp_user(user, is_shared):
+    if app.config['ENABLE_CUSTOM_ROLE_RESOURCE_SHOW'] and not is_shared and user:
+        for role in user.roles:
+            if role.name.lower().find(app.config['CUSTOM_ROLE_NAME_KEYWORD'].lower()) >= 0:
+                return True
+    return False
+
+
 class SliceFilter(SupersetFilter):
     def apply(self, query, func):  # noqa
         if security_manager.all_datasource_access():
             return query
         perms = self.get_view_menus('datasource_access')
         # TODO(bogdan): add `schema_access` support here
-        return query.filter(self.model.perm.in_(perms))
+        #if len(perms) > 0 :
+        if check_dbp_user(g.user, app.config['ENABLE_CHART_SHARE_IN_CUSTOM_ROLE']):
+            slice_ids = self.get_current_user_slice_ids()
+            return query.filter(self.model.perm.in_(perms)).filter(self.model.id.in_(slice_ids))
+        else:
+            return query.filter(self.model.perm.in_(perms))
+        #else:
+        #    return query.filter(self.model.id.in_(slice_ids))
 
 
 class DashboardFilter(SupersetFilter):
@@ -109,11 +124,20 @@ class DashboardFilter(SupersetFilter):
         User = security_manager.user_model
         # TODO(bogdan): add `schema_access` support here
         datasource_perms = self.get_view_menus('datasource_access')
-        slice_ids_qry = (
-            db.session
-            .query(Slice.id)
-            .filter(Slice.perm.in_(datasource_perms))
-        )
+        slice_ids_qry = None
+        if check_dbp_user(g.user, app.config['ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE']):
+            slice_ids = self.get_current_user_slice_ids()
+            slice_ids_qry = (
+                db.session
+                .query(Slice.id)
+                .filter(Slice.perm.in_(datasource_perms)).filter(Slice.id.in_(slice_ids))
+            )
+        else:
+            slice_ids_qry = (
+                db.session
+                .query(Slice.id)
+                .filter(Slice.perm.in_(datasource_perms))
+            )
         owner_ids_qry = (
             db.session
             .query(Dash.id)
@@ -2138,8 +2162,13 @@ class Superset(BaseSupersetView):
                         'superset/request_access/?'
                         'dashboard_id={dash.id}&'.format(**locals()))
 
-        dash_edit_perm = check_ownership(dash, raise_if_false=False) and \
-            security_manager.can_access('can_save_dash', 'Superset')
+        dash_edit_perm = True
+        if check_dbp_user(g.user, app.config['ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE']):
+            dash_edit_perm = check_ownership(dash, raise_if_false=False) and \
+                security_manager.can_access('can_save_dash', 'Superset') and g.user.id == dash.created_by_fk
+        else:
+            dash_edit_perm = check_ownership(dash, raise_if_false=False) and \
+                security_manager.can_access('can_save_dash', 'Superset')
         dash_save_perm = security_manager.can_access('can_save_dash', 'Superset')
         superset_can_explore = security_manager.can_access('can_explore', 'Superset')
         slice_can_edit = security_manager.can_access('can_edit', 'SliceModelView')

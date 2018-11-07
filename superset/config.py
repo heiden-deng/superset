@@ -149,7 +149,7 @@ PUBLIC_ROLE_LIKE_GAMMA = False
 # Babel config for translations
 # ---------------------------------------------------
 # Setup default language
-BABEL_DEFAULT_LOCALE = 'en'
+BABEL_DEFAULT_LOCALE = 'zh'
 # Your application default translation path
 BABEL_DEFAULT_FOLDER = 'superset/translations'
 # The allowed translation for you app
@@ -416,6 +416,16 @@ HIVE_POLL_INTERVAL = 5
 # geospatial ones) by inputing javascript in controls. This exposes
 # an XSS security vulnerability
 ENABLE_JAVASCRIPT_CONTROLS = False
+
+
+# config given role only show chart & dashboard which there owners
+ENABLE_CUSTOM_ROLE_RESOURCE_SHOW = (os.environ.get('ENABLE_CUSTOM_ROLE_RESOURCE_SHOW', 'true').lower().find('true') >= 0)
+ENABLE_DATASOURCE_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DATASOURCE_SHARE_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
+ENABLE_CHART_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_CHART_SHARE_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
+ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
+ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
+CUSTOM_ROLE_NAME_KEYWORD = os.environ.get('CUSTOM_ROLE_NAME_KEYWORD', 'Fcm')
+
 
 # The id of a template dashboard that should be copied to every new user
 DASHBOARD_TEMPLATE_ID = None
