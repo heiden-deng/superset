@@ -2,4 +2,4 @@
 
 set -ex
 
-docker build -t apache/incubator-superset -f Dockerfile .
+docker build -t apache/incubator-superset -f Dockerfile.update .
