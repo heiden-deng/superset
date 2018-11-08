@@ -33,6 +33,8 @@ USER work
 
 RUN cd superset/assets && yarn
 RUN cd superset/assets && npm run build
+RUN cd superset/static/assets && yarn
+RUN cd superset/static/assets && npm run build
 
 HEALTHCHECK CMD ["curl", "-f", "http://localhost:8088/health"]
 
