@@ -15,6 +15,8 @@ from flask_appbuilder import expose, SimpleFormView
 from flask_appbuilder.actions import action
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.decorators import has_access, has_access_api
+from flask_appbuilder.security.views import AuthDBView
+from flask_login import login_user
 from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
 import pandas as pd
@@ -2997,3 +2999,66 @@ def caravel(url):  # noqa
 
 
 # ---------------------------------------------------------------------
+
+
+class SupersetCasAuthDBView(AuthDBView):
+    login_template = 'appbuilder/general/security/login_cas.html'
+
+    @expose('/hna_iam_authorize', methods=['GET'])
+    def cas_authorized(self):
+        if g.user is not None and g.user.is_authenticated:
+            return redirect(self.appbuilder.get_url_for_index)
+
+        return redirect(app.config['IAM_LOGIN_VALID_URL'] + "?service=" + app.config['SUPERSET_CAS_CALL_URL'] + "&params=")
+
+    def add_role_if_missing(self, sm, user_id, role_name):
+        found_role = sm.find_role(role_name)
+        session = sm.get_session
+        user = session.query(sm.user_model).get(user_id)
+        if found_role and found_role not in user.roles:
+            user.roles += [found_role]
+            session.commit()
+
+    @expose('/callback', methods=['GET'])
+    def cas_callback(self):
+        if 'ticket' not in request.args:
+            flash("Invalid ticket param in callback")
+            return redirect(self.appbuilder.get_url_for_login)
+        ticket = request.args.get('ticket')
+        validateUrl = "%s?service=%s&ticket=%s&format=json" % (app.config['IAM_VALID_URL'], app.config['SUPERSET_CAS_CALL_URL'], ticket)
+        import requests
+        res = requests.get(validateUrl)
+        if res.status_code != 200 :
+            flash("request iam validate failure in callback")
+            return redirect(self.appbuilder.get_url_for_login)
+        user_info = res.content.decode()
+        user_info_json = json.load(user_info)
+        if 'authenticationSuccess' in user_info_json['serviceResponse']:
+            sucessRes = user_info_json['serviceResponse']['authenticationSuccess']
+            username = sucessRes.get('user')
+            email = sucessRes['attributes'].get('email')
+
+            sm = self.appbuilder.sm
+            user = sm.find_user(username)
+            role = sm.find_role(app.config['CUSTOM_ROLE_NAME_KEYWORD'])
+            if user is None and username:
+                user = sm.add_user(
+                    username=username,
+                    first_name=username,
+                    last_name='',
+                    email=email,
+                    role=role
+                )
+                msg = ("Welcome to Superset, {}".format(username))
+                flash(msg, 'info')
+                user = sm.auth_user_remote_user(username)
+            self.add_role_if_missing(sm, user.id, app.config['CUSTOM_ROLE_NAME_KEYWORD'])
+            login_user(user)
+            return redirect(self.redirect_url())
+
+
+        else:
+            flash("Error :%s " % user_info_json['serviceResponse']['authenticationFailure']['description'])
+            return redirect(self.appbuilder.get_url_for_login)
+
+

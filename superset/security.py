@@ -2,10 +2,14 @@
 """A set of constants and methods to manage permissions and security"""
 import logging
 
-from flask import g
+from flask import g,url_for,flash,redirect,request
 from flask_appbuilder.security.sqla import models as ab_models
 from flask_appbuilder.security.sqla.manager import SecurityManager
 from sqlalchemy import or_
+from flask_appbuilder.security.views import AuthDBView
+from flask_login import login_user
+from flask_appbuilder import expose
+import simplejson as json
 
 from superset import sql_parse
 from superset.connectors.connector_registry import ConnectorRegistry
@@ -75,7 +79,76 @@ OBJECT_SPEC_PERMISSIONS = set([
 ])
 
 
+class SupersetCasAuthDBView(AuthDBView):
+    login_template = 'appbuilder/general/security/login_cas.html'
+
+    @expose('/hna_iam_authorize', methods=['GET'])
+    def cas_authorized(self):
+        if g.user is not None and g.user.is_authenticated:
+            return redirect(self.appbuilder.get_url_for_index)
+
+        from superset import conf
+        return redirect(conf['IAM_LOGIN_VALID_URL'] + "?service=" + conf['SUPERSET_CAS_CALL_URL'] + "&params=")
+
+    def add_role_if_missing(self, sm, user_id, role_name):
+        found_role = sm.find_role(role_name)
+        session = sm.get_session
+        user = session.query(sm.user_model).get(user_id)
+        if found_role and found_role not in user.roles:
+            user.roles += [found_role]
+            session.commit()
+
+    @expose('/callback', methods=['GET'])
+    def cas_callback(self):
+        if 'ticket' not in request.args:
+            flash("Invalid ticket param in callback")
+            return redirect(self.appbuilder.get_url_for_login)
+        ticket = request.args.get('ticket')
+        from superset import conf
+        validateUrl = "%s?service=%s&ticket=%s&format=json" % (conf['IAM_VALID_URL'], conf['SUPERSET_CAS_CALL_URL'], ticket)
+        import requests
+        res = requests.get(validateUrl)
+        if res.status_code != 200 :
+            flash("request iam validate failure in callback")
+            return redirect(self.appbuilder.get_url_for_login)
+        # user_info_json = res.json()
+        user_info_str = res.content.decode()
+        user_info_json = json.loads(user_info_str)
+        if 'authenticationSuccess' in user_info_json['serviceResponse']:
+            sucessRes = user_info_json['serviceResponse']['authenticationSuccess']
+            username = sucessRes.get('user')
+            email = sucessRes['attributes'].get('email')
+
+            sm = self.appbuilder.sm
+            user = sm.find_user(username)
+            role = sm.find_role(conf['CUSTOM_ROLE_NAME_KEYWORD'])
+            if user is None and username:
+                user = sm.add_user(
+                    username=username,
+                    first_name=username,
+                    last_name='',
+                    email=email,
+                    role=role
+                )
+                msg = ("Welcome to Superset, {}".format(username))
+                flash(msg, 'info')
+                user = sm.update_user_auth_stat(user)
+            self.add_role_if_missing(sm, user.id, conf['CUSTOM_ROLE_NAME_KEYWORD'])
+            login_user(user)
+            return redirect(self.appbuilder.get_url_for_index)
+
+
+        else:
+            flash("Error :%s " % user_info_json['serviceResponse']['authenticationFailure']['description'])
+            return redirect(self.appbuilder.get_url_for_login)
+
 class SupersetSecurityManager(SecurityManager):
+
+    authdbview = SupersetCasAuthDBView
+
+    @property
+    def get_url_for_cas(self):
+        return url_for('SupersetCasAuthDBView.cas_authorized')
 
     def get_schema_perm(self, database, schema):
         if schema:

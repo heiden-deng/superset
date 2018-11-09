@@ -426,6 +426,10 @@ ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_
 ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
 CUSTOM_ROLE_NAME_KEYWORD = os.environ.get('CUSTOM_ROLE_NAME_KEYWORD', 'Fcm')
 
+IAM_LOGIN_VALID_URL = os.environ.get('IAM_LOGIN_VALID_URL', '')
+SUPERSET_CAS_CALL_URL = os.environ.get('SUPERSET_CAS_CALL_URL', '')
+IAM_VALID_URL = os.environ.get('IAM_VALID_URL', '')
+
 
 # The id of a template dashboard that should be copied to every new user
 DASHBOARD_TEMPLATE_ID = None
