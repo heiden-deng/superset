@@ -88,7 +88,10 @@ class SupersetCasAuthDBView(AuthDBView):
             return redirect(self.appbuilder.get_url_for_index)
 
         from superset import conf
-        return redirect(conf['IAM_LOGIN_VALID_URL'] + "?service=" + conf['SUPERSET_CAS_CALL_URL'] + "&params=")
+        target = ""
+        if len(conf['SUPERSET_CAS_PROXY_CALL_URL']) > 0:
+            target = "TARGET" + conf['SUPERSET_CAS_PROXY_CALL_URL']
+        return redirect(conf['IAM_LOGIN_VALID_URL'] + "?service=" + conf['SUPERSET_CAS_CALLBACK_URL'] + "&params=" +target)
 
     def add_role_if_missing(self, sm, user, role):
         # found_role = sm.find_role(role_name)
@@ -105,7 +108,7 @@ class SupersetCasAuthDBView(AuthDBView):
             return redirect(self.appbuilder.get_url_for_login)
         ticket = request.args.get('ticket')
         from superset import conf
-        validateUrl = "%s?service=%s&ticket=%s&format=json" % (conf['IAM_VALID_URL'], conf['SUPERSET_CAS_CALL_URL'], ticket)
+        validateUrl = "%s?service=%s&ticket=%s&format=json" % (conf['IAM_VALID_URL'], conf['SUPERSET_CAS_CALLBACK_URL'], ticket)
         import requests
         res = requests.get(validateUrl)
         if res.status_code != 200 :
