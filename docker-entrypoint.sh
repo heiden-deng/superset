@@ -6,7 +6,7 @@ if [ "$#" -ne 0 ]; then
 elif [ "$SUPERSET_ENV" = "local" ]; then
     superset runserver -d
 elif [ "$SUPERSET_ENV" = "production" ]; then
-    superset runserver -a 0.0.0.0 -w $((2 * $GUNICORE_WORKERS + 1))
+    superset runserver -a 0.0.0.0 -w $((2 * $GUNICORN_WORKERS + 1))
 else
     superset --help
 fi
