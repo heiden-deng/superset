@@ -90,12 +90,12 @@ class SupersetCasAuthDBView(AuthDBView):
         from superset import conf
         return redirect(conf['IAM_LOGIN_VALID_URL'] + "?service=" + conf['SUPERSET_CAS_CALL_URL'] + "&params=")
 
-    def add_role_if_missing(self, sm, user_id, role_name):
-        found_role = sm.find_role(role_name)
+    def add_role_if_missing(self, sm, user, role):
+        # found_role = sm.find_role(role_name)
         session = sm.get_session
-        user = session.query(sm.user_model).get(user_id)
-        if found_role and found_role not in user.roles:
-            user.roles += [found_role]
+        # user = session.query(sm.user_model).get(user_id)
+        if user and role and role not in user.roles:
+            user.roles += [role]
             session.commit()
 
     @expose('/callback', methods=['GET'])
@@ -132,8 +132,9 @@ class SupersetCasAuthDBView(AuthDBView):
                 )
                 msg = ("Welcome to Superset, {}".format(username))
                 flash(msg, 'info')
-                user = sm.update_user_auth_stat(user)
-            self.add_role_if_missing(sm, user.id, conf['CUSTOM_ROLE_NAME_KEYWORD'])
+                sm.update_user_auth_stat(user)
+
+            self.add_role_if_missing(sm, user, role)
             login_user(user)
             return redirect(self.appbuilder.get_url_for_index)
 
