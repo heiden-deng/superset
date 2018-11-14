@@ -2,7 +2,7 @@
 """A collection of ORM sqlalchemy models for Superset"""
 from contextlib import closing
 from copy import copy, deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 import functools
 import json
 import logging
@@ -987,6 +987,12 @@ class Log(Model):
     dttm = Column(DateTime, default=datetime.utcnow)
     duration_ms = Column(Integer)
     referrer = Column(String(1024))
+
+    @renders('dttm')
+    def local_dttm(self):
+        s = self.dttm + timedelta(hours=8)
+        return Markup('<span class="no-wrap">{}</span>'.format(s))
+
 
     @classmethod
     def log_this(cls, f):

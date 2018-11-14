@@ -60,6 +60,8 @@
     "bootstrap": "^3.3.6",
     "bootstrap-slider": "^10.0.0",
     "brace": "^0.11.1",
+    "canvas": "^2.1.0",
+    "alimask": "^1.0.3",
     "classnames": "^2.2.5",
     "d3": "^3.5.17",
     "d3-cloud": "^1.2.1",
@@ -129,7 +131,8 @@
     "supercluster": "^4.1.1",
     "underscore": "^1.8.3",
     "urijs": "^1.18.10",
-    "viewport-mercator-project": "^5.0.0"
+    "viewport-mercator-project": "^5.0.0",
+    "water-mark-oc": "^1.1.0"
   },
   "devDependencies": {
     "babel-cli": "^6.14.0",

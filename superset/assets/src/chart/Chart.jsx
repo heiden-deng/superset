@@ -11,6 +11,7 @@ import RefreshChartOverlay from '../components/RefreshChartOverlay';
 import visPromiseLookup from '../visualizations';
 import sandboxedEval from '../modules/sandbox';
 import './chart.css';
+import alimask from 'alimask';
 
 const propTypes = {
   annotationData: PropTypes.object,
@@ -22,6 +23,7 @@ const propTypes = {
   headerHeight: PropTypes.number,
   height: PropTypes.number,
   width: PropTypes.number,
+  watermark: PropTypes.string,
   setControlValue: PropTypes.func,
   timeout: PropTypes.number,
   vizType: PropTypes.string.isRequired,
@@ -48,12 +50,16 @@ const defaultProps = {
   getFilters: () => ({}),
 };
 
+
+const chartusercontainer = document.getElementById('app');
+const bootstrap = JSON.parse(chartusercontainer.getAttribute('data-bootstrap'));
+
 class Chart extends React.PureComponent {
   constructor(props) {
     super(props);
     // visualizations are lazy-loaded with promises that resolve to a renderVis function
     this.state = {
-      renderVis: null,
+      renderVis: null,date: new Date()
     };
 
     // these properties are used by visualizations
@@ -68,9 +74,15 @@ class Chart extends React.PureComponent {
     this.height = this.height.bind(this);
     this.width = this.width.bind(this);
     this.visPromise = null;
+    this.watermark = this.watermark.bind(this);
   }
 
   componentDidMount() {
+    this.timerID = setInterval(
+        () => this.tick(),
+        1000
+    );
+
     if (this.props.triggerQuery) {
       this.props.actions.runQuery(
         this.props.formData,
@@ -93,7 +105,7 @@ class Chart extends React.PureComponent {
     this.formData = nextProps.formData;
     this.datasource = nextProps.datasource;
     if (nextProps.vizType !== this.props.vizType) {
-      this.setState(() => ({ renderVis: null }));
+      this.setState(() => ({ renderVis: null, date: new Date()}));
       this.loadAsyncVis(nextProps.vizType);
     }
   }
@@ -115,6 +127,12 @@ class Chart extends React.PureComponent {
 
   componentWillUnmount() {
     this.visPromise = null;
+  }
+
+  tick() {
+    this.setState({
+        date: new Date()
+        });
   }
 
   getFilters() {
@@ -164,6 +182,13 @@ class Chart extends React.PureComponent {
       this.props.height || (this.container && this.container.el && this.container.el.offsetHeight)
     );
   }
+
+  watermark() {
+    return (
+      'url(' + alimask(bootstrap.user_name + ' ' + this.state.date.toLocaleString()) + ')'
+    );
+  }
+
 
   error(e) {
     this.props.actions.chartRenderingFailed(e, this.props.chartId);
@@ -230,7 +255,7 @@ class Chart extends React.PureComponent {
     const isLoading = this.props.chartStatus === 'loading' || !this.state.renderVis;
 
     // this allows <Loading /> to be positioned in the middle of the chart
-    const containerStyles = isLoading ? { height: this.height(), width: this.width() } : null;
+    const containerStyles = isLoading ? { height: this.height(), width: this.width() } : {background: this.watermark()};
     return (
       <div className={`chart-container ${isLoading ? 'is-loading' : ''}`} style={containerStyles}>
         {this.renderTooltip()}

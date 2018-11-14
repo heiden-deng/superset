@@ -18,13 +18,13 @@ class QueryView(SupersetModelView):
     add_title = _('Add Query')
     edit_title = _('Edit Query')
 
-    list_columns = ['user', 'database', 'status', 'start_time', 'end_time']
+    list_columns = ['user', 'database', 'status', 'start_dttm', 'end_dttm']
     label_columns = {
         'user': _('User'),
         'database': _('Database'),
         'status': _('Status'),
-        'start_time': _('Start Time'),
-        'end_time': _('End Time'),
+        'start_dttm': _('Start Time'),
+        'end_dttm': _('End Time'),
     }
 
 

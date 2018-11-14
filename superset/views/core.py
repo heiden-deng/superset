@@ -709,13 +709,13 @@ class LogModelView(SupersetModelView):
     add_title = _('Add Log')
     edit_title = _('Edit Log')
 
-    list_columns = ('user', 'action', 'dttm')
+    list_columns = ('user', 'action', 'local_dttm')
     edit_columns = ('user', 'action', 'dttm', 'json')
     base_order = ('dttm', 'desc')
     label_columns = {
         'user': _('User'),
         'action': _('Action'),
-        'dttm': _('dttm'),
+        'local_dttm': _('Time'),
         'json': _('JSON'),
     }
 
@@ -1398,6 +1398,7 @@ class Superset(BaseSupersetView):
             'slice': slc.data if slc else None,
             'standalone': standalone,
             'user_id': user_id,
+            'user_name': g.user.username,
             'forced_height': request.args.get('height'),
             'common': self.common_bootsrap_payload(),
         }
@@ -2199,6 +2200,7 @@ class Superset(BaseSupersetView):
 
         bootstrap_data = {
             'user_id': g.user.get_id(),
+            'user_name': g.user.username,
             'dashboard_data': dashboard_data,
             'datasources': {ds.uid: ds.data for ds in datasources},
             'common': self.common_bootsrap_payload(),

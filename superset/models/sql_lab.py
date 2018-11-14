@@ -1,10 +1,11 @@
 # pylint: disable=C,R,W
 """A collection of ORM sqlalchemy models for SQL Lab"""
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 from flask import Markup
 from flask_appbuilder import Model
+from flask_appbuilder.models.decorators import renders
 from future.standard_library import install_aliases
 import sqlalchemy as sqla
 from sqlalchemy import (
@@ -76,6 +77,20 @@ class Query(Model):
     __table_args__ = (
         sqla.Index('ti_user_id_changed_on', user_id, changed_on),
     )
+
+    @renders('start_time')
+    def start_dttm(self):
+        if self.start_time is not None:
+            start_dt = datetime(1970, 1, 1) + timedelta(milliseconds=float(self.start_time))
+            s = start_dt + timedelta(hours=8)
+            return Markup('<span class="no-wrap">{}</span>'.format(s))
+
+    @renders('start_time')
+    def end_dttm(self):
+        if self.end_time is not None:
+            end_dt = datetime(1970, 1, 1) + timedelta(milliseconds=float(self.end_time))
+            s = end_dt + timedelta(hours=8)
+            return Markup('<span class="no-wrap">{}</span>'.format(s))
 
     @property
     def limit_reached(self):
