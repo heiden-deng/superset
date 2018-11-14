@@ -15,6 +15,7 @@ import { isTruthy } from '../../utils/common';
 import {
   computeBarChartWidth,
   drawBarValues,
+  drawChangeBarValues,
   generateBubbleTooltipContent,
   generateMultiLineTooltipContent,
   generateRichLineTooltipContent,
@@ -305,6 +306,13 @@ function nvd3Vis(element, props) {
         chart.width(width);
         chart.xAxis.showMaxMin(false);
         chart.stacked(isBarStacked);
+        chart.legend.dispatch.on('legendClick', function() {
+          if (showBarValue && isBarStacked) {
+            setTimeout(function () {
+                drawChangeBarValues(svg, chart, data, isBarStacked, yAxisFormat);
+            }, ANIMATION_TIME);
+          }
+        });
         break;
 
       case 'dist_bar':
@@ -330,6 +338,13 @@ function nvd3Vis(element, props) {
           width = computeBarChartWidth(data, isBarStacked, maxWidth);
         }
         chart.width(width);
+        chart.legend.dispatch.on('legendClick', function() {
+          if (showBarValue && isBarStacked) {
+            setTimeout(function () {
+                drawChangeBarValues(svg, chart, data, isBarStacked, yAxisFormat);
+            }, ANIMATION_TIME);
+          }
+        });
         break;
 
       case 'pie':

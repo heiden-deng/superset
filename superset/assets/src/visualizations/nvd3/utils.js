@@ -37,6 +37,59 @@ export function drawBarValues(svg, data, stacked, axisFormat) {
     });
 }
 
+export function drawChangeBarValues(svg, chart, data, stacked, axisFormat) {
+  const format = d3.format(axisFormat || '.3s');
+
+    const totalStackedValues = stacked && data.length !== 0 ?
+        data[0].values.map(function (bar, iBar) {
+            const bars = data.map(function (series) {
+                return series.values[iBar];
+            });
+            return d3.sum(bars, function (d, idx) {
+                if (chart.state.disabled[idx] === false) return d.y;
+            });
+        }) : [];
+
+    if (!svg.select('g.nv-barsWrap').selectAll('text.bar-chart-label').empty()) {
+        svg.select('g.nv-barsWrap').selectAll('text.bar-chart-label').remove();
+    }
+
+    let smallYRect = [];
+    svg.select('g.nv-groups').selectAll('g.nv-group').each(function (d, i) {
+        d3.select(this).selectAll('rect').each(function (d1, i1) {
+            d3.select(this).select(function () {
+                if (i === 0) {
+                    smallYRect[i1] = this;
+                } else {
+                    if (smallYRect[i1].y.baseVal.value > this.y.baseVal.value) {
+                        smallYRect[i1] = this;
+                    }
+                }
+            });
+        });
+    });
+
+    const groupLabels = svg.select('g.nv-barsWrap').append('g');
+
+    smallYRect.forEach(function(d, index) {
+      let attrs = d.attributes;
+
+      const transformAttr = attrs.transform.value;
+      const yPos = parseFloat(attrs.y.value);
+      const xPos = parseFloat(attrs.x.value);
+      const rectWidth = parseFloat(attrs.width.value);
+
+      const t = groupLabels.append('text')
+          .attr('x', xPos) // rough position first, fine tune later
+          .attr('y', yPos - 5)
+          .text(format(stacked ? totalStackedValues[index] : d.y))
+          .attr('transform', transformAttr)
+          .attr('class', 'bar-chart-label');
+        const labelWidth = t.node().getBBox().width;
+        t.attr('x', xPos + rectWidth / 2 - labelWidth / 2); // fine tune
+    });
+}
+
 // Custom sorted tooltip
 // use a verbose formatter for times
 export function generateRichLineTooltipContent(d, valueFormatter) {
