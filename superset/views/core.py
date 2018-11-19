@@ -382,10 +382,16 @@ class CsvToDatabaseView(SimpleFormView):
         try:
             utils.ensure_path_exists(config['UPLOAD_FOLDER'])
             csv_file.save(path)
-            table = SqlaTable(table_name=form.name.data)
-            table.database = form.data.get('con')
-            table.database_id = table.database.id
-            table.database.db_engine_spec.create_table_from_csv(form, table)
+            if csv_filename.lower().endswith("csv"):
+                table = SqlaTable(table_name=form.name.data)
+                table.database = form.data.get('con')
+                table.database_id = table.database.id
+                table.database.db_engine_spec.create_table_from_csv(form, table)
+            elif csv_filename.lower().endswith("xls") or csv_filename.lower().endswith("xlsx"):
+                table = SqlaTable(table_name=form.name.data)
+                table.database = form.data.get('con')
+                table.database_id = table.database.id
+                table.database.db_engine_spec.create_table_from_excel(form, path)
         except Exception as e:
             try:
                 os.remove(path)

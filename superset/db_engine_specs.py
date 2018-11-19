@@ -24,6 +24,7 @@ import boto3
 from flask import g
 from flask_babel import lazy_gettext as _
 import pandas
+import xlrd
 from past.builtins import basestring
 import sqlalchemy as sqla
 from sqlalchemy import Column, select
@@ -162,6 +163,7 @@ class BaseEngineSpec(object):
         parsed_query = sql_parse.SupersetQuery(sql)
         return parsed_query.get_query_with_new_limit(limit)
 
+
     @staticmethod
     def csv_to_df(**kwargs):
         kwargs['filepath_or_buffer'] = \
@@ -171,6 +173,11 @@ class BaseEngineSpec(object):
         chunks = pandas.read_csv(**kwargs)
         df = pandas.DataFrame()
         df = pandas.concat(chunk for chunk in chunks)
+        return df
+
+    @staticmethod
+    def excel_sheet_to_df(**kwargs):
+        df = pandas.read_excel(**kwargs)
         return df
 
     @staticmethod
@@ -221,6 +228,117 @@ class BaseEngineSpec(object):
         }
 
         BaseEngineSpec.df_to_db(**df_to_db_kwargs)
+
+    @staticmethod
+    def convert_str_to_int(num_str):
+        result = 256
+        try:
+            result = int(num_str)
+        except ValueError:
+            logging.warn('Invalid custom type map int varchar/nvarchar len')
+        return result
+
+    @staticmethod
+    def convert_str_sqlarchmy_type(type_map_str):
+        if type_map_str is None or len(type_map_str) <= 8:
+            return {}
+        import ast
+        custom_type_map_dict = ast.literal_eval(type_map_str)
+        result = {}
+        # supported types
+        type_name_map = {
+            "bigint": sqla.types.BigInteger(),
+            'bool': sqla.types.Boolean(),
+            'date': sqla.types.Date(),
+            'datetime': sqla.types.DateTime(),
+            'float': sqla.types.Float(),
+            'int': sqla.types.Integer(),
+            'interval': sqla.types.Interval(),
+            'largebinary': sqla.types.LargeBinary(),
+            'blob': sqla.types.BLOB(),
+            'numeric': sqla.types.Numeric(),
+            'smallinteger': sqla.types.SmallInteger(),
+            'varchar': sqla.types.VARCHAR(),
+            'text': sqla.types.Text(),
+            'time': sqla.types.Time(),
+            'decimal': sqla.types.DECIMAL(),
+            'nvarchar': sqla.types.NVARCHAR(),
+            'timestamp': sqla.types.TIMESTAMP(),
+
+        }
+        import re
+        for fieldname in custom_type_map_dict.keys():
+            fieldtype_tmp = custom_type_map_dict.get(fieldname)
+            fieldtype = fieldtype_tmp.lower()
+            if fieldtype in type_name_map:
+                result[fieldname] = type_name_map.get(fieldtype)
+            elif fieldtype.find('nvarchar') >= 0:  # special types
+                field_len_str = re.sub(r'\D', "", fieldtype)
+                if field_len_str and len(field_len_str) > 0:
+                    field_len = BaseEngineSpec.convert_str_to_int(field_len_str)
+                    result[fieldname] = sqla.types.NVARCHAR(field_len)
+            elif fieldtype.find('varchar') >= 0:
+                field_len_str = re.sub(r'\D', "", fieldtype)
+                if field_len_str and len(field_len_str) > 0:
+                    field_len = BaseEngineSpec.convert_str_to_int(field_len_str)
+                    result[fieldname] = sqla.types.VARCHAR(field_len)
+        return result
+
+    @staticmethod
+    def create_table_from_excel(form, excel_filepath):
+        def _allowed_file(filename):
+            # Only allow specific file extensions as specified in the config
+            extension = os.path.splitext(filename)[1]
+            return extension and extension[1:] in config['ALLOWED_EXTENSIONS']
+
+        filename = secure_filename(form.csv_file.data.filename)
+        if not _allowed_file(filename):
+            raise Exception('Invalid file type selected')
+        # 'skip_blank_lines': form.skip_blank_lines.data,
+        excel = xlrd.open_workbook(excel_filepath)
+        from superset.connectors.sqla.models import SqlaTable
+        typemap = {}
+
+        for sheet in excel.sheets():
+            if sheet.nrows == 0:
+                continue
+
+            tab_name = form.name.data + "_" + sheet.name
+            skiprows = 0
+            r = 0
+            while r < 50 and r < sheet.nrows:
+                if sheet.row(r)[0].value != '' and sheet.row(r)[sheet.ncols - 1].value != '':
+                    skiprows = r
+                    break
+                r = r + 1
+            kwargs = {
+                'io': excel_filepath,
+                'sheetname': sheet.name,
+                'header': form.header.data if form.header.data else 0,
+                'index_col': form.index_col.data,
+                'skiprows': form.skiprows.data if form.skiprows.data and form.skiprows.data > 0 else skiprows,
+                'na_values': ['9999'],
+            }
+            df = BaseEngineSpec.excel_sheet_to_df(**kwargs)
+
+            table = SqlaTable(table_name=tab_name)
+            table.database = form.data.get('con')
+            table.database_id = table.database.id
+            df_to_db_kwargs = {
+                'table': table,
+                'df': df,
+                'name': tab_name,
+                'con': create_engine(form.con.data.sqlalchemy_uri_decrypted, echo=False),
+                'schema': form.schema.data,
+                'if_exists': form.if_exists.data,
+                'index': form.index.data,
+                'index_label': form.index_label.data,
+                'chunksize': 10000,
+                'dtype': BaseEngineSpec.convert_str_sqlarchmy_type(form.sep.data),
+            }
+
+            BaseEngineSpec.df_to_db(**df_to_db_kwargs)
+
 
     @classmethod
     def convert_dttm(cls, target_type, dttm):

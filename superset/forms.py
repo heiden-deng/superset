@@ -98,7 +98,7 @@ class CsvToDatabaseForm(DynamicForm):
         _('CSV File'),
         description=_('Select a CSV file to be uploaded to a database.'),
         validators=[
-            FileRequired(), FileAllowed(['csv'], _('CSV Files Only!'))])
+            FileRequired(), FileAllowed(['csv', 'xls', 'xlsx'], _('CSV/XLS/XLSX Files Only!'))])
     con = QuerySelectField(
         _('Database'),
         query_factory=csv_allowed_dbs,
@@ -110,8 +110,8 @@ class CsvToDatabaseForm(DynamicForm):
         widget=BS3TextFieldWidget(),
         filters=[lambda x: x or None])
     sep = StringField(
-        _('Delimiter'),
-        description=_('Delimiter used by CSV file (for whitespace use \s+).'),
+        _('Delimiter/(Type Map)'),
+        description=('Delimiter used by CSV file (for whitespace use \s+).Type Map userd by excel file(ex:{"field1":"varchar",..})'),
         validators=[DataRequired()],
         widget=BS3TextFieldWidget())
     if_exists = SelectField(
