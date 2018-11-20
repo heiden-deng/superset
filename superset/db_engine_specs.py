@@ -284,6 +284,24 @@ class BaseEngineSpec(object):
                     result[field] = sqla.types.VARCHAR(max_len)
                 else:
                     result[field] = sqla.types.Text()
+            elif df_field_type_map[field].kind == 'S':
+                max_len = max([len(item) for item in series])
+                if max_len < 50:
+                    result[field] = sqla.types.VARCHAR(50)
+                elif max_len < 6000:
+                    max_len = int(max_len * 1.5)
+                    result[field] = sqla.types.VARCHAR(max_len)
+                else:
+                    result[field] = sqla.types.Text()
+            elif df_field_type_map[field].kind == 'U':
+                max_len = max([len(item) for item in series])
+                if max_len < 50:
+                    result[field] = sqla.types.NVARCHAR(50)
+                elif max_len < 6000:
+                    max_len = int(max_len * 1.5)
+                    result[field] = sqla.types.NVARCHAR(max_len)
+                else:
+                    result[field] = sqla.types.Text()
             elif df_field_type_map[field].kind == 'f':
                 result[field] = sqla.types.DECIMAL()
 
