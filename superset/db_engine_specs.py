@@ -239,7 +239,7 @@ class BaseEngineSpec(object):
         return result
 
     @staticmethod
-    def convert_str_sqlarchmy_type(type_map_str):
+    def convert_str_sqlarchmy_type(type_map_str, df):
         import ast
         custom_type_map_dict = {}
         if type_map_str and len(type_map_str) > 8:
@@ -355,7 +355,7 @@ class BaseEngineSpec(object):
                 'index': form.index.data,
                 'index_label': form.index_label.data,
                 'chunksize': 10000,
-                'dtype': BaseEngineSpec.convert_str_sqlarchmy_type(form.sep.data),
+                'dtype': BaseEngineSpec.convert_str_sqlarchmy_type(form.sep.data, df),
             }
 
             BaseEngineSpec.df_to_db(**df_to_db_kwargs)
