@@ -1,3 +1,6 @@
+本项目fork 自 https://github.com/apache/incubator-superset
+增加自定义功能
+
 Superset
 =========
 
