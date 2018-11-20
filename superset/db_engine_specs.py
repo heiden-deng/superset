@@ -240,13 +240,13 @@ class BaseEngineSpec(object):
 
     @staticmethod
     def convert_str_sqlarchmy_type(type_map_str):
-        if type_map_str is None or len(type_map_str) <= 8:
-            return {}
         import ast
-        custom_type_map_dict = ast.literal_eval(type_map_str)
+        custom_type_map_dict = {}
+        if type_map_str and len(type_map_str) > 8:
+            custom_type_map_dict = ast.literal_eval(type_map_str)
         result = {}
         # supported types
-        type_name_map = {
+        sqla_type_name_map = {
             "bigint": sqla.types.BigInteger(),
             'bool': sqla.types.Boolean(),
             'date': sqla.types.Date(),
@@ -264,14 +264,35 @@ class BaseEngineSpec(object):
             'decimal': sqla.types.DECIMAL(),
             'nvarchar': sqla.types.NVARCHAR(),
             'timestamp': sqla.types.TIMESTAMP(),
+            'datetime64': sqla.types.DateTime(),
+            'int64': sqla.types.BigInteger(),
+            'float64': sqla.types.DECIMAL(),
 
         }
+
+        df_field_type_map = {}
+        for field, value in df.dtypes.items():
+            df_field_type_map[field] = value
+
+        for field, series in df.items():
+            if df_field_type_map[field].kind == 'O':
+                max_len = max([len(item) for item in series])
+                if max_len < 50:
+                    result[field] = sqla.types.VARCHAR(50)
+                elif max_len < 6000:
+                    max_len = int(max_len * 1.5)
+                    result[field] = sqla.types.VARCHAR(max_len)
+                else:
+                    result[field] = sqla.types.Text()
+            elif df_field_type_map[field].kind == 'f':
+                result[field] = sqla.types.DECIMAL()
+
         import re
         for fieldname in custom_type_map_dict.keys():
             fieldtype_tmp = custom_type_map_dict.get(fieldname)
             fieldtype = fieldtype_tmp.lower()
-            if fieldtype in type_name_map:
-                result[fieldname] = type_name_map.get(fieldtype)
+            if fieldtype in sqla_type_name_map:
+                result[fieldname] = sqla_type_name_map.get(fieldtype)
             elif fieldtype.find('nvarchar') >= 0:  # special types
                 field_len_str = re.sub(r'\D', "", fieldtype)
                 if field_len_str and len(field_len_str) > 0:
