@@ -3070,3 +3070,66 @@ class SupersetCasAuthDBView(AuthDBView):
             return redirect(self.appbuilder.get_url_for_login)
 
 
+
+
+class VistorRegModelView(SupersetModelView, DeleteMixin):
+    datamodel = SQLAInterface(models.VisitorReg)
+
+    list_title = _('List Vistors ')
+    show_title = _('Show Vistor')
+    add_title = _('Add Vistor')
+    edit_title = _('Edit Vistor')
+
+    list_columns = [
+        'jbh_uid', 'name', 'phone', 'group_prop',
+        'registry_type', 'first_vistor_time', 'first_receptor', 'communication_times', 'agree', 'status'
+    ]
+    add_columns = [
+        'jbh_uid', 'name', 'phone', 'group_prop',
+        'registry_type', 'illustration', 'first_vistor_time', 'first_receptor', 'communication_times', 'agree', 'status'
+    ]
+
+    label_columns = {
+        'jbh_uid': _('聚宝汇UID'),
+        'name': _('姓名'),
+        'phone': _('电话'),
+        'group_prop': _('集团属性'),
+        'registry_type': _('登记类型'),
+        'first_vistor_time': _('首次来访时间'),
+        'first_receptor': _('首次接待人员'),
+        'communication_times': _('沟通次数'),
+        'agree': _('客户是否同意'),
+        'status': _('状态'),
+        'illustration': _('客户诉求'),
+    }
+
+appbuilder.add_view(
+    VistorRegModelView,
+    'Vistor Registion',
+    label=__('访客登记'),
+    icon='fa-registered',
+    category='Disposal process',
+    category_label=__('处置流程'),
+    category_icon='fa-hand-lizard-o')
+
+appbuilder.add_separator('Disposal process')
+appbuilder.add_link(
+    'Investor Communication',
+    label=__('投资人沟通'),
+    href='/csvtodatabaseview/form',
+    icon='fa-odnoklassniki',
+    category='Disposal process',
+    category_label=__('处置流程'),
+    category_icon='fa-hand-lizard-o')
+
+appbuilder.add_separator('Disposal process')
+
+appbuilder.add_link(
+    'Cash Plan',
+    label=__('兑付计划'),
+    href='/csvtodatabaseview/form',
+    icon='fa-odnoklassniki',
+    category='Disposal process',
+    category_label=__('处置流程'),
+    category_icon='fa-hand-lizard-o')
+
