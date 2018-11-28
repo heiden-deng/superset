@@ -1,3 +1,16 @@
+本项目fork 自 https://github.com/apache/incubator-superset
+增加自定义功能
+新增功能包括：  
+1）新增角色，角色名通过CUSTOM_ROLE_NAME_KEYWORD 环境变量设置，默认为Fcm，该角色具有gamma权限+csv导入相关权限  
+2）该角色用户可以看到其他用户分享的dashboard，但是不能编辑和删除，例如Fcm角色下的两个用户fcm1,fcm2，其中fcm1导入的表，创建的chart,fcm2默认均不能看到，fcm2创建的dashboard，通过把fcm2设置到dashboard中owner属性时，fcm2才能看到该dashboard,但是不饿能标记；  
+3）dashboard chart增加水印功能；  
+4）修复柱状图取消子项时，累计值未及时修改的bug；  
+5）增加导入excel功能，导入excel时支持自动优化字段类型，并可以通过页面设定字段类型和长度；  
+6）优化镜像创建过程；  
+7）包括但不限于上述修改和修复。  
+
+
+
 Superset
 =========
 
