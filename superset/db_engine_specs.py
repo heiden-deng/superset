@@ -40,6 +40,8 @@ from superset import app, cache_util, conf, db, sql_parse, utils
 from superset.exceptions import SupersetTemplateException
 from superset.utils import QueryStatus
 
+
+
 config = app.config
 
 tracking_url_trans = conf.get('TRACKING_URL_TRANSFORMER')
@@ -163,7 +165,6 @@ class BaseEngineSpec(object):
         parsed_query = sql_parse.SupersetQuery(sql)
         return parsed_query.get_query_with_new_limit(limit)
 
-
     @staticmethod
     def csv_to_df(**kwargs):
         kwargs['filepath_or_buffer'] = \
@@ -180,14 +181,45 @@ class BaseEngineSpec(object):
         df = pandas.read_excel(**kwargs)
         return df
 
+
+    @staticmethod
+    def get_table(table_name, schema, database_id):
+        from superset.connectors.sqla.models import SqlaTable
+        with db.session.no_autoflush:
+            if schema == '' or not schema:
+                table_exist = db.session.query(SqlaTable).filter(
+                    SqlaTable.table_name == table_name,
+                    SqlaTable.database_id == database_id,
+                ).first()
+            else:
+                table_exist = db.session.query(SqlaTable).filter(
+                    SqlaTable.table_name == table_name,
+                    SqlaTable.schema == schema,
+                    SqlaTable.database_id == database_id,
+                ).first()
+        return table_exist
+
+    @staticmethod
+    def delete_table(table_name, schema, database_id):
+        table_exist = BaseEngineSpec.get_table(table_name, schema, database_id)
+        if table_exist:
+            db.session.delete(table_exist)
+            db.session.commit()
+
+
     @staticmethod
     def df_to_db(df, table, **kwargs):
+        replace_strategy = kwargs['if_exists']
+        if replace_strategy == 'repacedata':
+            kwargs['if_exists'] = 'replace'
         df.to_sql(**kwargs)
-        table.user_id = g.user.id
-        table.schema = kwargs['schema']
-        table.fetch_metadata()
-        db.session.add(table)
-        db.session.commit()
+
+        if not BaseEngineSpec.get_table(table.table_name, kwargs['schema'], table.database_id):
+            table.user_id = g.user.id
+            table.schema = kwargs['schema']
+            table.fetch_metadata()
+            db.session.add(table)
+            db.session.commit()
 
     @staticmethod
     def create_table_from_csv(form, table):
@@ -229,6 +261,7 @@ class BaseEngineSpec(object):
 
         BaseEngineSpec.df_to_db(**df_to_db_kwargs)
 
+
     @staticmethod
     def convert_str_to_int(num_str):
         result = 256
@@ -238,8 +271,10 @@ class BaseEngineSpec(object):
             logging.warn('Invalid custom type map int varchar/nvarchar len')
         return result
 
+
     @staticmethod
     def convert_str_sqlarchmy_type(type_map_str, df):
+
         import ast
         custom_type_map_dict = {}
         if type_map_str and len(type_map_str) > 8:
@@ -311,7 +346,7 @@ class BaseEngineSpec(object):
             fieldtype = fieldtype_tmp.lower()
             if fieldtype in sqla_type_name_map:
                 result[fieldname] = sqla_type_name_map.get(fieldtype)
-            elif fieldtype.find('nvarchar') >= 0:  # special types
+            elif fieldtype.find('nvarchar') >= 0:   # special types
                 field_len_str = re.sub(r'\D', "", fieldtype)
                 if field_len_str and len(field_len_str) > 0:
                     field_len = BaseEngineSpec.convert_str_to_int(field_len_str)
@@ -323,8 +358,9 @@ class BaseEngineSpec(object):
                     result[fieldname] = sqla.types.VARCHAR(field_len)
         return result
 
+
     @staticmethod
-    def create_table_from_excel(form, excel_filepath):
+    def create_table_from_excel(form, excel_filepath, table):
         def _allowed_file(filename):
             # Only allow specific file extensions as specified in the config
             extension = os.path.splitext(filename)[1]
@@ -359,10 +395,11 @@ class BaseEngineSpec(object):
                 'na_values': ['9999'],
             }
             df = BaseEngineSpec.excel_sheet_to_df(**kwargs)
-
-            table = SqlaTable(table_name=tab_name)
+            if table.table_name != tab_name:
+                table = SqlaTable(table_name=tab_name)
             table.database = form.data.get('con')
             table.database_id = table.database.id
+
             df_to_db_kwargs = {
                 'table': table,
                 'df': df,
@@ -377,7 +414,6 @@ class BaseEngineSpec(object):
             }
 
             BaseEngineSpec.df_to_db(**df_to_db_kwargs)
-
 
     @classmethod
     def convert_dttm(cls, target_type, dttm):

@@ -49,3 +49,4 @@ class CeleryConfig(object):
 CELERY_CONFIG = None
 if len(REDIS_HOST) != 0:
     CELERY_CONFIG = CeleryConfig
+

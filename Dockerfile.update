@@ -8,8 +8,10 @@ MAINTAINER heiden deng <jq.deng@hnair.com>
 # Configure environment
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    HOME=/home/work
+    HOME=/home/work \
+    TZ=Asia/Shanghai
 
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # RUN mkdir $HOME/incubator-superset
 WORKDIR $HOME/incubator-superset

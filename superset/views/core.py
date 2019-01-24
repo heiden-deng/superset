@@ -6,17 +6,17 @@ import os
 import re
 import time
 import traceback
+import requests
 from urllib import parse
 
 from flask import (
     flash, g, Markup, redirect, render_template, request, Response, url_for,
 )
+
 from flask_appbuilder import expose, SimpleFormView
 from flask_appbuilder.actions import action
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.decorators import has_access, has_access_api
-from flask_appbuilder.security.views import AuthDBView
-from flask_login import login_user
 from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
 import pandas as pd
@@ -351,7 +351,7 @@ appbuilder.add_view_no_menu(DatabaseAsync)
 class CsvToDatabaseView(SimpleFormView):
     form = CsvToDatabaseForm
     form_template = 'superset/form_view/csv_to_database_view/edit.html'
-    form_title = _('CSV to Database configuration')
+    form_title = _('Excel to Database configuration')
     add_columns = ['database', 'schema', 'table_name']
 
     def form_get(self, form):
@@ -369,7 +369,7 @@ class CsvToDatabaseView(SimpleFormView):
         schema_name = form.schema.data or ''
 
         if not self.is_schema_allowed(database, schema_name):
-            message = _('Database "{0}" Schema "{1}" is not allowed for csv uploads. '
+            message = _('Database "{0}" Schema "{1}" is not allowed for excel uploads. '
                         'Please contact Superset Admin'.format(database.database_name,
                                                                schema_name))
             flash(message, 'danger')
@@ -388,10 +388,17 @@ class CsvToDatabaseView(SimpleFormView):
                 table.database_id = table.database.id
                 table.database.db_engine_spec.create_table_from_csv(form, table)
             elif csv_filename.lower().endswith("xls") or csv_filename.lower().endswith("xlsx"):
-                table = SqlaTable(table_name=form.name.data)
+                import xlrd
+                excel = xlrd.open_workbook(path)
+                table_name = form.name.data + "_" + excel.sheet_names()[0]
+                if database.has_table_ex(table_name, schema_name) and form.if_exists.data == 'replace':
+                    from ..db_engine_specs import BaseEngineSpec
+                    BaseEngineSpec.delete_table(table_name, schema_name, database.id)
+                table = SqlaTable(table_name=table_name)
                 table.database = form.data.get('con')
                 table.database_id = table.database.id
-                table.database.db_engine_spec.create_table_from_excel(form, path)
+                table.database.db_engine_spec.create_table_from_excel(form, path, table)
+
         except Exception as e:
             try:
                 os.remove(path)
@@ -407,7 +414,7 @@ class CsvToDatabaseView(SimpleFormView):
         os.remove(path)
         # Go back to welcome page / splash screen
         db_name = table.database.database_name
-        message = _('CSV file "{0}" uploaded to table "{1}" in '
+        message = _('Excel file "{0}" uploaded to table "{1}" in '
                     'database "{2}"'.format(csv_filename,
                                             form.name.data,
                                             db_name))
@@ -571,6 +578,24 @@ class SliceAddView(SliceModelView):  # noqa
         'description', 'description_markeddown', 'datasource_id', 'datasource_type',
         'datasource_name_text', 'datasource_link',
         'owners', 'modified', 'changed_on']
+
+    @expose('/read_slices', methods=['GET'])
+    def read_slices(self):
+        slice_response = self.api_read()
+        if slice_response.status_code != 200:
+            return '{}'
+        results = json.loads(slice_response.data, encoding='UTF-8')
+        need_remove = 0
+        user_filter = None
+        if g.user:
+            user_filter = ("%s %s") % (g.user.first_name,g.user.last_name)
+        for slice_inst in results['result']:
+            if user_filter and user_filter not in slice_inst['owners']:
+                results['result'].remove(slice_inst)
+                need_remove += 1
+        results['count'] -= need_remove
+        return json_success(json.dumps(results), slice_response.status_code)
+
 
 
 appbuilder.add_view_no_menu(SliceAddView)
@@ -760,7 +785,7 @@ def add_user_from_dbp():
         first_name = user_info.get('first_name', None)
         last_name = user_info.get('last_name', None)
         email = user_info.get('email', None)
-        password = user_info.get('password', None)
+        password = user_info.get('password', "")
         user_role = user_info.get('role', config.get('CUSTOM_ROLE_NAME_KEYWORD'))
 
         if not username and not email:
@@ -786,6 +811,18 @@ def add_user_from_dbp():
             'Error in call add_user_from_dbp.'
             'The error message returned was:\n{}').format(traceback.format_exc())
 
+
+@csrf.exempt
+@app.route('/start_monitor_table_date_column', methods=['GET'])
+def monitor_table_date_column():
+    security_manager.monitor_datetime_column()
+    return json_success("Success")
+
+@csrf.exempt
+@app.route('/start_send_notification_email', methods=['GET'])
+def start_send_notification_email():
+    security_manager.send_notification_email()
+    return json_success("Success")
 
 class KV(BaseSupersetView):
 
@@ -3004,8 +3041,8 @@ appbuilder.add_link(
 )
 
 appbuilder.add_link(
-    'Upload a CSV',
-    label=__('Upload a CSV'),
+    'Upload a Excel',
+    label=__('Upload a Excel'),
     href='/csvtodatabaseview/form',
     icon='fa-upload',
     category='Sources',
@@ -3044,129 +3081,3 @@ def caravel(url):  # noqa
 
 
 # ---------------------------------------------------------------------
-
-
-class SupersetCasAuthDBView(AuthDBView):
-    login_template = 'appbuilder/general/security/login_cas.html'
-
-    @expose('/hna_iam_authorize', methods=['GET'])
-    def cas_authorized(self):
-        if g.user is not None and g.user.is_authenticated:
-            return redirect(self.appbuilder.get_url_for_index)
-
-        return redirect(app.config['IAM_LOGIN_VALID_URL'] + "?service=" + app.config['SUPERSET_CAS_CALL_URL'] + "&params=")
-
-    def add_role_if_missing(self, sm, user_id, role_name):
-        found_role = sm.find_role(role_name)
-        session = sm.get_session
-        user = session.query(sm.user_model).get(user_id)
-        if found_role and found_role not in user.roles:
-            user.roles += [found_role]
-            session.commit()
-
-    @expose('/callback', methods=['GET'])
-    def cas_callback(self):
-        if 'ticket' not in request.args:
-            flash("Invalid ticket param in callback")
-            return redirect(self.appbuilder.get_url_for_login)
-        ticket = request.args.get('ticket')
-        validateUrl = "%s?service=%s&ticket=%s&format=json" % (app.config['IAM_VALID_URL'], app.config['SUPERSET_CAS_CALL_URL'], ticket)
-        import requests
-        res = requests.get(validateUrl)
-        if res.status_code != 200 :
-            flash("request iam validate failure in callback")
-            return redirect(self.appbuilder.get_url_for_login)
-        user_info = res.content.decode()
-        user_info_json = json.load(user_info)
-        if 'authenticationSuccess' in user_info_json['serviceResponse']:
-            sucessRes = user_info_json['serviceResponse']['authenticationSuccess']
-            username = sucessRes.get('user')
-            email = sucessRes['attributes'].get('email')
-
-            sm = self.appbuilder.sm
-            user = sm.find_user(username)
-            role = sm.find_role(app.config['CUSTOM_ROLE_NAME_KEYWORD'])
-            if user is None and username:
-                user = sm.add_user(
-                    username=username,
-                    first_name=username,
-                    last_name='',
-                    email=email,
-                    role=role
-                )
-                msg = ("Welcome to Superset, {}".format(username))
-                flash(msg, 'info')
-                user = sm.auth_user_remote_user(username)
-            self.add_role_if_missing(sm, user.id, app.config['CUSTOM_ROLE_NAME_KEYWORD'])
-            login_user(user)
-            return redirect(self.redirect_url())
-
-
-        else:
-            flash("Error :%s " % user_info_json['serviceResponse']['authenticationFailure']['description'])
-            return redirect(self.appbuilder.get_url_for_login)
-
-
-
-
-class VistorRegModelView(SupersetModelView, DeleteMixin):
-    datamodel = SQLAInterface(models.VisitorReg)
-
-    list_title = _('List Vistors ')
-    show_title = _('Show Vistor')
-    add_title = _('Add Vistor')
-    edit_title = _('Edit Vistor')
-
-    list_columns = [
-        'jbh_uid', 'name', 'phone', 'group_prop',
-        'registry_type', 'first_vistor_time', 'first_receptor', 'communication_times', 'agree', 'status'
-    ]
-    add_columns = [
-        'jbh_uid', 'name', 'phone', 'group_prop',
-        'registry_type', 'illustration', 'first_vistor_time', 'first_receptor', 'communication_times', 'agree', 'status'
-    ]
-
-    label_columns = {
-        'jbh_uid': _('聚宝汇UID'),
-        'name': _('姓名'),
-        'phone': _('电话'),
-        'group_prop': _('集团属性'),
-        'registry_type': _('登记类型'),
-        'first_vistor_time': _('首次来访时间'),
-        'first_receptor': _('首次接待人员'),
-        'communication_times': _('沟通次数'),
-        'agree': _('客户是否同意'),
-        'status': _('状态'),
-        'illustration': _('客户诉求'),
-    }
-
-appbuilder.add_view(
-    VistorRegModelView,
-    'Vistor Registion',
-    label=__('访客登记'),
-    icon='fa-registered',
-    category='Disposal process',
-    category_label=__('处置流程'),
-    category_icon='fa-hand-lizard-o')
-
-appbuilder.add_separator('Disposal process')
-appbuilder.add_link(
-    'Investor Communication',
-    label=__('投资人沟通'),
-    href='/csvtodatabaseview/form',
-    icon='fa-odnoklassniki',
-    category='Disposal process',
-    category_label=__('处置流程'),
-    category_icon='fa-hand-lizard-o')
-
-appbuilder.add_separator('Disposal process')
-
-appbuilder.add_link(
-    'Cash Plan',
-    label=__('兑付计划'),
-    href='/csvtodatabaseview/form',
-    icon='fa-odnoklassniki',
-    category='Disposal process',
-    category_label=__('处置流程'),
-    category_icon='fa-hand-lizard-o')
-

@@ -17,8 +17,8 @@ import numpy
 import pandas as pd
 import sqlalchemy as sqla
 from sqlalchemy import (
-    Boolean, Column, create_engine, DateTime, ForeignKey, Integer,
-    MetaData, String, Table, Text,Date,
+    Boolean, Column, create_engine, DateTime, ForeignKey, Integer,Date,
+    MetaData, String, Table, Text,
 )
 from sqlalchemy.engine import url
 from sqlalchemy.engine.url import make_url
@@ -960,6 +960,11 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         return engine.has_table(
             table.table_name, table.schema or None)
 
+    def has_table_ex(self, table_name, schema):
+        engine = self.get_sqla_engine()
+        return engine.has_table(
+            table_name, schema or None)
+
     @utils.memoized
     def get_dialect(self):
         sqla_url = url.make_url(self.sqlalchemy_uri_decrypted)
@@ -992,7 +997,6 @@ class Log(Model):
     def local_dttm(self):
         s = self.dttm + timedelta(hours=8)
         return Markup('<span class="no-wrap">{}</span>'.format(s))
-
 
     @classmethod
     def log_this(cls, f):
@@ -1135,32 +1139,3 @@ class DatasourceAccessRequest(Model, AuditMixinNullable):
 
 
 
-vistorreg_user = Table('vistorreg_user', metadata,
-                   Column('id', Integer, primary_key=True),
-                   Column('user_id', Integer, ForeignKey('ab_user.id')),
-                   Column('vistorreg_id', Integer, ForeignKey('visitor.id')))
-
-
-class VisitorReg(Model, AuditMixinNullable):
-
-    """A slice is essentially a report or a view on data"""
-
-    __tablename__ = 'visitor'
-    id = Column(Integer, primary_key=True)
-    jbh_uid = Column(Integer)
-    name = Column(String(10))
-    phone = Column(String(15))
-    group_prop = Column(String(10))
-    registry_type = Column(Integer)
-    first_vistor_time = Column(Date)
-    first_receptor = Column(String(10))
-    illustration = Column(Text)
-    communication_times = Column(Integer)
-    deal_times = Column(Integer, default=0)
-    agree = Column(Boolean)
-    status = Column(String(10))
-
-    owners = relationship(security_manager.user_model, secondary=vistorreg_user)
-
-    def __repr__(self):
-        return self.name

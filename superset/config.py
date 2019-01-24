@@ -89,10 +89,10 @@ ENABLE_PROXY_FIX = False
 # GLOBALS FOR APP Builder
 # ------------------------------
 # Uncomment to setup Your App name
-APP_NAME = 'Superset'
+APP_NAME = 'NaviBI'
 
 # Uncomment to setup an App icon
-APP_ICON = '/static/assets/images/superset-logo@2x.png'
+APP_ICON = '/static/assets/images/navibi-logo.png'
 
 # Druid query timezone
 # tz.tzutc() : Using utc timezone
@@ -417,6 +417,18 @@ HIVE_POLL_INTERVAL = 5
 # an XSS security vulnerability
 ENABLE_JAVASCRIPT_CONTROLS = False
 
+MAIL_SERVER=os.environ.get('CUSTOM_MAIL_SERVER', '')
+MAIL_PORT=os.environ.get('CUSTOM_MAIL_PORT', 25)
+MAIL_USE_SSL=os.environ.get('CUSTOM_MAIL_USE_SSL', False)
+MAIL_USE_TLS=os.environ.get('CUSTOM_MAIL_USE_TLS', False)
+MAIL_DEBUG=os.environ.get('CUSTOM_MAIL_DEBUG', True)
+MAIL_DEFAULT_SENDER=os.environ.get('CUSTOM_MAIL_DEFAULT_SENDER', '')
+MAIL_USERNAME=os.environ.get('CUSTOM_MAIL_USERNAME', '')
+MAIL_PASSWORD=os.environ.get('CUSTOM_MAIL_PASSWORD', '')
+MONITOR_TASK_CRONTAB=os.environ.get('MONITOR_TASK_CRONTAB', '0 */3 * * *')
+SEND_EMAIL_TASK_CRONTAB=os.environ.get('SEND_EMAIL_TASK_CRONTAB', '0 */4 * * *')
+
+
 
 # config given role only show chart & dashboard which there owners
 ENABLE_CUSTOM_ROLE_RESOURCE_SHOW = (os.environ.get('ENABLE_CUSTOM_ROLE_RESOURCE_SHOW', 'true').lower().find('true') >= 0)
@@ -425,11 +437,6 @@ ENABLE_CHART_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_CHART_SHARE_IN_CUSTO
 ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
 ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE = (os.environ.get('ENABLE_DASHBOARD_SHARE_EDIT_IN_CUSTOM_ROLE', 'false').lower().find('true') >= 0)
 CUSTOM_ROLE_NAME_KEYWORD = os.environ.get('CUSTOM_ROLE_NAME_KEYWORD', 'Fcm')
-
-IAM_LOGIN_VALID_URL = os.environ.get('IAM_LOGIN_VALID_URL', '')
-SUPERSET_CAS_PROXY_CALL_URL = os.environ.get('SUPERSET_CAS_PROXY_CALL_URL', '')
-SUPERSET_CAS_CALLBACK_URL = os.environ.get('SUPERSET_CAS_CALLBACK_URL', '')
-IAM_VALID_URL = os.environ.get('IAM_VALID_URL', '')
 
 
 # The id of a template dashboard that should be copied to every new user

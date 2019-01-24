@@ -155,7 +155,7 @@ class TableModelView(DatasourceModelView, DeleteMixin, YamlExportMixin):  # noqa
 
     list_columns = [
         'link', 'database_name',
-        'changed_by_', 'modified']
+        'changed_by_', 'modified','is_monitor']
     order_columns = ['modified']
     add_columns = ['database', 'schema', 'table_name']
     edit_columns = [
@@ -164,6 +164,8 @@ class TableModelView(DatasourceModelView, DeleteMixin, YamlExportMixin):  # noqa
         'description', 'owner',
         'main_dttm_col', 'default_endpoint', 'offset', 'cache_timeout',
         'is_sqllab_view', 'template_params',
+        'is_monitor','notify_emails','notify_template','monitor_dttm_column','threshold_of_day',
+        'monitor_filter'
     ]
     base_filters = [['id', DatasourceFilter, lambda: []]]
     show_columns = edit_columns + ['perm', 'slices']
@@ -217,6 +219,13 @@ class TableModelView(DatasourceModelView, DeleteMixin, YamlExportMixin):  # noqa
             'Duration (in seconds) of the caching timeout for this table. '
             'A timeout of 0 indicates that the cache never expires. '
             'Note this defaults to the database timeout if undefined.'),
+        'is_monitor': _('Whether the table will be monitor?'),
+        'notify_emails': _('A set of email address notification will be send to, comma separated'),
+        'notify_template': _('通知邮件模板,通常保持默认即可，要求JSON格式，示例:{"title":"有事项即将到期，请及时处理","body_prefix":"以下事项即将截止：","body_suffix":""},'
+                             'title对应邮件标题，body_prefix对应邮件内容起始部分，body_suffix对应邮件末尾附件字段，例如签名等等，邮件内容由body_prefix+提醒数据+body_suffix三部分组成'),
+        'monitor_dttm_column': _('The datetime column will be monitor'),
+        'threshold_of_day': _('How long is the notification in advance?'),
+        'monitor_filter': _('Monitor filter condition,eg: status="已兑付"')
     }
     label_columns = {
         'slices': _('Associated Charts'),
@@ -238,6 +247,12 @@ class TableModelView(DatasourceModelView, DeleteMixin, YamlExportMixin):  # noqa
         'is_sqllab_view': _('SQL Lab View'),
         'template_params': _('Template parameters'),
         'modified': _('Modified'),
+        'is_monitor': _('Enable Table Monitor'),
+        'notify_emails': _('Notification Email Address'),
+        'notify_template': _('Notification Email Template'),
+        'monitor_dttm_column': _('Monitor Datetime Column'),
+        'threshold_of_day': _('Notify Time Threshold'),
+        'monitor_filter': _("Filter Condition")
     }
 
     def pre_add(self, table):

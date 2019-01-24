@@ -132,7 +132,6 @@ class Chart extends React.PureComponent {
         date: new Date()
         });
   }
-
   getFilters() {
     return this.props.getFilters();
   }

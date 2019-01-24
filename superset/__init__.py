@@ -12,6 +12,9 @@ from flask_compress import Compress
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.contrib.fixers import ProxyFix
+from flask_mail import Mail
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from superset import config, utils
 from superset.connectors.connector_registry import ConnectorRegistry
@@ -29,6 +32,8 @@ with open(APP_DIR + '/static/assets/backendSync.json', 'r') as f:
 app = Flask(__name__)
 app.config.from_object(CONFIG_MODULE)
 conf = app.config
+
+mail = Mail(app)
 
 #################################################################
 # Handling manifest file logic at app start
@@ -194,6 +199,47 @@ results_backend = app.config.get('RESULTS_BACKEND')
 module_datasource_map = app.config.get('DEFAULT_MODULE_DS_MAP')
 module_datasource_map.update(app.config.get('ADDITIONAL_MODULE_DS_MAP'))
 ConnectorRegistry.register_sources(module_datasource_map)
+
+
+import time
+import atexit
+import fcntl
+
+
+def monitor_job():
+    print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+    security_manager.monitor_datetime_column()
+    print("I'm working for monitor")
+
+
+def send_job():
+    print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+    security_manager.send_notification_email(app)
+    print("I'm working for send")
+
+
+new_tmp_path = "/tmp/" + time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))
+f = open(new_tmp_path + "-scheduler.lock", "wb")
+
+
+def unlock():
+    fcntl.flock(f, fcntl.LOCK_UN)
+    f.close()
+
+
+atexit.register(unlock)
+
+
+try:
+    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(monitor_job, CronTrigger.from_crontab(app.config.get('MONITOR_TASK_CRONTAB'))) #
+    scheduler.add_job(send_job, CronTrigger.from_crontab(app.config.get('SEND_EMAIL_TASK_CRONTAB'))) #
+    scheduler.start()
+except:
+    print("Monitor process has started,skip create new monitor task...")
+
+
 
 # Flask-Compress
 if conf.get('ENABLE_FLASK_COMPRESS'):

@@ -50,7 +50,6 @@ const defaultProps = {
   getFilters: () => ({}),
 };
 
-
 const chartusercontainer = document.getElementById('app');
 const bootstrap = JSON.parse(chartusercontainer.getAttribute('data-bootstrap'));
 
@@ -82,7 +81,6 @@ class Chart extends React.PureComponent {
         () => this.tick(),
         1000
     );
-
     if (this.props.triggerQuery) {
       this.props.actions.runQuery(
         this.props.formData,
@@ -134,7 +132,6 @@ class Chart extends React.PureComponent {
         date: new Date()
         });
   }
-
   getFilters() {
     return this.props.getFilters();
   }
@@ -188,7 +185,6 @@ class Chart extends React.PureComponent {
       'url(' + alimask(bootstrap.user_name + ' ' + this.state.date.toLocaleString()) + ')'
     );
   }
-
 
   error(e) {
     this.props.actions.chartRenderingFailed(e, this.props.chartId);

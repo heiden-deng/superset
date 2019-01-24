@@ -90,6 +90,7 @@ export function drawChangeBarValues(svg, chart, data, stacked, axisFormat) {
     });
 }
 
+
 // Custom sorted tooltip
 // use a verbose formatter for times
 export function generateRichLineTooltipContent(d, valueFormatter) {

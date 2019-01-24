@@ -2,18 +2,21 @@
 """A set of constants and methods to manage permissions and security"""
 import logging
 
-from flask import g,url_for,flash,redirect,request
+from flask import g, render_template
 from flask_appbuilder.security.sqla import models as ab_models
 from flask_appbuilder.security.sqla.manager import SecurityManager
 from sqlalchemy import or_
-from flask_appbuilder.security.views import AuthDBView
-from flask_login import login_user
-from flask_appbuilder import expose
-import simplejson as json
 
 from superset import sql_parse
 from superset.connectors.connector_registry import ConnectorRegistry
 
+import pandas as pd
+import datetime
+import hashlib
+import json
+
+
+from flask_mail import Message
 
 
 READ_ONLY_MODEL_VIEWS = {
@@ -48,7 +51,7 @@ ADMIN_ONLY_VIEW_MENUS = {
 }
 
 ALPHA_ONLY_VIEW_MENUS = {
-    'Upload a CSV',
+    'Upload a Excel',
 }
 
 ADMIN_ONLY_PERMISSIONS = {
@@ -78,81 +81,10 @@ OBJECT_SPEC_PERMISSIONS = set([
     'metric_access',
 ])
 
+md5_handler = hashlib.md5()
 
-class SupersetCasAuthDBView(AuthDBView):
-    login_template = 'appbuilder/general/security/login_cas.html'
-
-    @expose('/hna_iam_authorize', methods=['GET'])
-    def cas_authorized(self):
-        if g.user is not None and g.user.is_authenticated:
-            return redirect(self.appbuilder.get_url_for_index)
-
-        from superset import conf
-        target = ""
-        if len(conf['SUPERSET_CAS_PROXY_CALL_URL']) > 0:
-            target = "TARGET" + conf['SUPERSET_CAS_PROXY_CALL_URL']
-        return redirect(conf['IAM_LOGIN_VALID_URL'] + "?service=" + conf['SUPERSET_CAS_CALLBACK_URL'] + "&params=" +target)
-
-    def add_role_if_missing(self, sm, user, role):
-        # found_role = sm.find_role(role_name)
-        session = sm.get_session
-        # user = session.query(sm.user_model).get(user_id)
-        if user and role and role not in user.roles:
-            user.roles += [role]
-            session.commit()
-
-    @expose('/callback', methods=['GET'])
-    def cas_callback(self):
-        if 'ticket' not in request.args:
-            flash("Invalid ticket param in callback")
-            return redirect(self.appbuilder.get_url_for_login)
-        ticket = request.args.get('ticket')
-        from superset import conf
-        validateUrl = "%s?service=%s&ticket=%s&format=json" % (conf['IAM_VALID_URL'], conf['SUPERSET_CAS_CALLBACK_URL'], ticket)
-        import requests
-        res = requests.get(validateUrl)
-        if res.status_code != 200 :
-            flash("request iam validate failure in callback")
-            return redirect(self.appbuilder.get_url_for_login)
-        # user_info_json = res.json()
-        user_info_str = res.content.decode()
-        user_info_json = json.loads(user_info_str)
-        if 'authenticationSuccess' in user_info_json['serviceResponse']:
-            sucessRes = user_info_json['serviceResponse']['authenticationSuccess']
-            username = sucessRes.get('user')
-            email = sucessRes['attributes'].get('email')
-
-            sm = self.appbuilder.sm
-            user = sm.find_user(username)
-            role = sm.find_role(conf['CUSTOM_ROLE_NAME_KEYWORD'])
-            if user is None and username:
-                user = sm.add_user(
-                    username=username,
-                    first_name=username,
-                    last_name='',
-                    email=email,
-                    role=role
-                )
-                msg = ("Welcome to Superset, {}".format(username))
-                flash(msg, 'info')
-                sm.update_user_auth_stat(user)
-
-            self.add_role_if_missing(sm, user, role)
-            login_user(user)
-            return redirect(self.appbuilder.get_url_for_index)
-
-
-        else:
-            flash("Error :%s " % user_info_json['serviceResponse']['authenticationFailure']['description'])
-            return redirect(self.appbuilder.get_url_for_login)
 
 class SupersetSecurityManager(SecurityManager):
-
-    authdbview = SupersetCasAuthDBView
-
-    @property
-    def get_url_for_cas(self):
-        return url_for('SupersetCasAuthDBView.cas_authorized')
 
     def get_schema_perm(self, database, schema):
         if schema:
@@ -462,7 +394,7 @@ class SupersetSecurityManager(SecurityManager):
             logging.info("add %s on %s to role %s" % (permission_name, view_menu_name, role.name))
 
         permission_name = 'menu_access'
-        view_menu_name = 'Upload a CSV'
+        view_menu_name = 'Upload a Excel'
         permission = self.find_permission(permission_name)
         view_menu = self.find_view_menu(view_menu_name)
         pv = None
@@ -653,3 +585,103 @@ class SupersetSecurityManager(SecurityManager):
                     ),
                 )
                 logging.info("add new permission-view to role %s" % app.config['CUSTOM_ROLE_NAME_KEYWORD'])
+
+
+    def monitor_datetime_column(self):
+        from superset import db
+        from superset.connectors.sqla.models import SqlaTable
+        from superset.connectors.sqla.models import NotificationTable
+        #sesh = self.get_session
+        tables = db.session.query(SqlaTable).filter(SqlaTable.is_monitor).all()
+        for t in tables:
+            if t.monitor_dttm_column and t.notify_emails:
+                table_name = t.table_name
+                datetime_column = t.monitor_dttm_column
+                datetime_column = datetime_column.strip()
+                #notify_emails = t.notify_emails
+                threshold_of_day = t.threshold_of_day
+                #notify_template = t.notify_template
+                filter_condition = t.monitor_filter
+                now = datetime.datetime.today()
+                now_str = now.strftime("%Y-%m-%d")
+                if threshold_of_day == 0:
+                    condition = (" date(%s)='%s'" % (datetime_column, now_str))
+                else:
+                    end_date = now + datetime.timedelta(days=threshold_of_day)
+                    end_date_str = end_date.strftime("%Y-%m-%d")
+                    condition = (" date(%s)>='%s' and date(%s)<='%s'" % (datetime_column, now_str, datetime_column, end_date_str))
+
+                try:
+                    if filter_condition and len(filter_condition) > 0:
+                        condition = condition + " and " + filter_condition
+                    # results = pd.read_sql_query("select * from " + table_name + " where " + condition, db.engine)
+                    for chunck in pd.read_sql_query("select * from " + table_name + " where " + condition, db.engine,
+                                                    chunksize=100):
+                        email_content_html = chunck.to_html()
+                        email_content = chunck.to_string()
+
+                        notification_item = NotificationTable()
+                        md5_handler.update(email_content.encode('utf-8'))
+                        notification_item.msg_md5 = md5_handler.hexdigest()
+                        notification_item.status = False
+                        notification_item.table_id = t.id
+                        notification_item.msg = email_content_html
+
+                        notify_have_send = None
+                        with db.session.no_autoflush:
+                            notify_have_send = db.session.query(NotificationTable).filter(
+                                NotificationTable.msg_md5 == notification_item.msg_md5
+                            ).first()
+                        if notify_have_send:
+                            logging.warn("notification with md5(%s) have send!" % notification_item.msg_md5)
+                            continue
+
+                        db.session.add(notification_item)
+                        #print(chunck)
+                    db.session.commit()
+                except Exception as e:
+                    e.with_traceback()
+                    logging.error(e)
+
+    def send_notification_email(self,app):
+        from superset import db, mail, config
+        from superset.connectors.sqla.models import SqlaTable, NotificationTable
+        try:
+            notifications = db.session.query(NotificationTable).filter(NotificationTable.status == False).all()
+            if notifications and len(notifications) > 0:
+                with app.app_context():
+                    with mail.connect() as conn:
+                        for notification in notifications:
+                            table = db.session.query(SqlaTable).filter(SqlaTable.id == notification.table_id).first()
+                            if not table:
+                                continue
+
+                            email_target = table.notify_emails.split(',')
+                            notify_template_json = None
+                            try:
+                                notify_template_json = json.loads(table.notify_template.encode('utf-8'))
+                            except Exception as e2:
+                                logging.warn("notification template is invalid")
+                            body_prefix = notify_template_json.get("body_prefix",
+                                                                   "    以下事项即将截止：") if notify_template_json else "    以下事项即将截止："
+                            body_suffix = notify_template_json.get("body_suffix", "") if notify_template_json else ""
+                            email_title = notify_template_json.get("title",
+                                                                   "有事项即将到期，请及时处理") if notify_template_json else "有事项即将到期，请及时处理"
+                            kwargs = {
+                                "body_prefix": body_prefix,
+                                "email_content_html": notification.msg,
+                                "body_suffix": body_suffix,
+                                "email_content": notification.msg
+                            }
+                            msg = Message(email_title, recipients=email_target)
+                            msg.body = render_template('email/task_expire_reminder.txt', **kwargs)
+                            msg.html = render_template('email/task_expire_reminder.html', **kwargs)
+                            conn.send(msg)
+                            notification.msg_send_date = datetime.datetime.today()
+                            notification.status = True
+                            db.session.merge(notification)
+
+                        db.session.commit()
+        except Exception as e:
+            logging.error(e)
+
